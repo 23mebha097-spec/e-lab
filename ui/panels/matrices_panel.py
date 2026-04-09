@@ -1,0 +1,311 @@
+from PyQt5 import QtWidgets, QtGui, QtCore
+import numpy as np
+
+class MatricesPanel(QtWidgets.QWidget):
+    def __init__(self, main_window):
+        super().__init__()
+        self.mw = main_window
+        self.sliders = {} # Store slider widgets for each joint
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QtWidgets.QVBoxLayout(self)
+        
+        # Top: Matrix Display
+        header_matrices = QtWidgets.QLabel("TRANSFORM MATRICES")
+        header_matrices.setStyleSheet("color: #1976d2; font-size: 14px; font-weight: bold; padding: 5px;")
+        layout.addWidget(header_matrices)
+
+        self.refresh_btn = QtWidgets.QPushButton("Update Matrices")
+        self.refresh_btn.clicked.connect(self.update_display)
+        layout.addWidget(self.refresh_btn)
+        
+        self.text_area = QtWidgets.QTextEdit()
+        self.text_area.setReadOnly(True)
+        self.text_area.setFont(QtGui.QFont("Consolas", 10))
+        self.text_area.setStyleSheet("background-color: white; color: #1565c0; border: 1px solid #e0e0e0;")
+        layout.addWidget(self.text_area)
+
+        # Bottom: Joint Control Sliders
+        header_sliders = QtWidgets.QLabel("Joint Rotation Controls")
+        header_sliders.setStyleSheet("color: #1976d2; font-size: 15px; font-weight: bold; margin-top: 15px; padding: 5px;")
+        layout.addWidget(header_sliders)
+
+        self.scroll_area = QtWidgets.QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setStyleSheet("background-color: white; border: none;")
+        
+        self.slider_container = QtWidgets.QWidget()
+        self.slider_layout = QtWidgets.QVBoxLayout(self.slider_container)
+        self.slider_layout.setAlignment(QtCore.Qt.AlignTop)
+        self.scroll_area.setWidget(self.slider_container)
+        
+        layout.addWidget(self.scroll_area)
+
+    def refresh_sliders(self):
+        """Clears and rebuilds sliders based on confirmed joints"""
+        # Clear existing
+        while self.slider_layout.count():
+            item = self.slider_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        self.sliders = {}
+        
+        joint_data = self.mw.joint_tab.joints
+        if not joint_data:
+            empty_msg = QtWidgets.QLabel("No joints created yet.")
+            empty_msg.setStyleSheet("color: #9e9e9e; font-style: italic; padding: 10px;")
+            self.slider_layout.addWidget(empty_msg)
+            return
+
+        for child_name, data in joint_data.items():
+            # Hide slave joints - their movement is driven by the master
+            joint_id = data.get('joint_id', child_name)
+            is_slave = False
+            for master, slaves in self.mw.robot.joint_relations.items():
+                if any(s_id == joint_id for s_id, r in slaves):
+                    is_slave = True
+                    break
+            
+            if is_slave:
+                continue
+
+            # Container for each joint's control
+            group = QtWidgets.QFrame()
+            group.setStyleSheet("background-color: transparent; border-radius: 5px; margin-bottom: 5px;")
+            glay = QtWidgets.QVBoxLayout(group)
+            glay.setContentsMargins(10, 8, 10, 8)
+            
+            # Label: Custom Name Only
+            custom_name = data.get('custom_name', f"{data['parent']} \u2192 {child_name}")
+            lbl = QtWidgets.QLabel(f"{custom_name} ({['X','Y','Z'][data['axis']]})")
+            lbl.setStyleSheet("color: #1976d2; font-weight: bold; font-size: 13px;")
+            glay.addWidget(lbl)
+            
+            # Slider Row
+            row = QtWidgets.QHBoxLayout()
+            
+            slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            slider.setRange(int(data['min'] * 10), int(data['max'] * 10))
+            slider.setValue(int(data.get('current_angle', 0.0) * 10))
+            slider.setCursor(QtCore.Qt.PointingHandCursor)
+            slider.setStyleSheet("""
+                QSlider::groove:horizontal {
+                    height: 8px;
+                    background: #f0f0f0;
+                    border-radius: 4px;
+                    border: 1px solid #ddd;
+                }
+                QSlider::sub-page:horizontal {
+                    background: #bbdefb;
+                    border-radius: 4px;
+                }
+                QSlider::handle:horizontal {
+                    background: white;
+                    border: 2px solid #1976d2;
+                    width: 16px;
+                    height: 16px;
+                    margin-top: -5px;
+                    margin-bottom: -5px;
+                    border-radius: 8px;
+                }
+                QSlider::handle:horizontal:hover {
+                    background: #e3f2fd;
+                }
+            """)
+            
+            spin = QtWidgets.QDoubleSpinBox()
+            spin.setRange(data['min'], data['max'])
+            spin.setValue(data.get('current_angle', 0.0))
+            spin.setFixedWidth(70)
+            spin.setStyleSheet("""
+                QDoubleSpinBox {
+                    background: white;
+                    color: #1976d2;
+                    border: 1px solid #1976d2;
+                    border-radius: 3px;
+                    padding: 2px;
+                    font-weight: bold;
+                }
+            """)
+            
+            # Connect
+            slider.valueChanged.connect(lambda v, c=child_name, s=spin: self.on_slider_move(c, v/10.0, s))
+            spin.valueChanged.connect(lambda v, c=child_name, sl=slider: self.on_spin_move(c, v, sl))
+            
+            row.addWidget(slider)
+            row.addWidget(spin)
+            glay.addLayout(row)
+            
+            self.slider_layout.addWidget(group)
+            self.sliders[child_name] = {'slider': slider, 'spin': spin}
+
+    def on_slider_move(self, child_name, value, spinbox):
+        spinbox.blockSignals(True)
+        spinbox.setValue(value)
+        spinbox.blockSignals(False)
+        self.apply_rotation(child_name, value)
+        
+        # Sync the Joint Panel slider if it's currently showing this joint
+        if hasattr(self.mw.joint_tab, 'active_joint_control') and self.mw.joint_tab.active_joint_control == child_name:
+            self.mw.joint_tab.joint_control_slider.blockSignals(True)
+            self.mw.joint_tab.joint_control_slider.setValue(int(value * 10))
+            self.mw.joint_tab.joint_control_slider.blockSignals(False)
+            self.mw.joint_tab.joint_control_spinbox.blockSignals(True)
+            self.mw.joint_tab.joint_control_spinbox.setValue(value)
+            self.mw.joint_tab.joint_control_spinbox.blockSignals(False)
+
+    def sync_slider(self, child_name, value):
+        """External call to update a slider value without triggering events"""
+        if child_name in self.sliders:
+            data = self.sliders[child_name]
+            data['slider'].blockSignals(True)
+            data['slider'].setValue(int(value * 10))
+            data['slider'].blockSignals(False)
+            data['spin'].blockSignals(True)
+            data['spin'].setValue(value)
+            data['spin'].blockSignals(False)
+            self.update_display()
+
+    def on_spin_move(self, child_name, value, slider):
+        slider.blockSignals(True)
+        slider.setValue(int(value * 10))
+        slider.blockSignals(False)
+        self.apply_rotation(child_name, value)
+
+    def apply_rotation(self, child_name, angle):
+        """Apply rotation using the JointPanel's unified logic"""
+        if child_name not in self.mw.joint_tab.joints:
+            return
+            
+        # Call the JointPanel's logic to handle the actual 3D rotation
+        # This ensures the object rotates exactly the same way as in the Joint tab
+        self.mw.joint_tab.apply_joint_rotation(child_name, angle)
+        
+        # Refresh matrix display
+        self.update_display()
+
+    def update_display(self):
+        self.text_area.clear()
+        robot = self.mw.robot
+        created_joints = getattr(self.mw.joint_tab, 'joints', {})
+        
+        if not created_joints:
+            self.text_area.setHtml("<p style='color:#9e9e9e; font-style:italic; padding: 20px;'>No active joints created yet.</p>")
+            return
+
+        html = """
+        <style>
+            .container { padding: 8px; background-color: #ffffff; }
+            .matrix-box { 
+                border: 2px solid #3b82f6; 
+                border-radius: 8px; 
+                margin-bottom: 20px; 
+                overflow: hidden;
+            }
+            .box-header {
+                background-color: #3b82f6;
+                color: #ffffff;
+                font-family: 'Segoe UI', sans-serif;
+                font-size: 13px;
+                font-weight: 700;
+                padding: 8px 14px;
+                letter-spacing: 0.5px;
+            }
+            .pos-bar {
+                background-color: #eff6ff;
+                color: #1e40af;
+                font-family: 'Consolas', monospace;
+                font-size: 12px;
+                font-weight: 600;
+                padding: 5px 14px;
+                border-bottom: 1px solid #dbeafe;
+            }
+            .matrix-grid {
+                border-collapse: collapse;
+                width: 100%;
+            }
+            .matrix-grid th {
+                background-color: #eff6ff;
+                color: #3b82f6;
+                font-family: 'Segoe UI', sans-serif;
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+                padding: 5px 4px;
+                text-align: center;
+                border-bottom: 1px solid #dbeafe;
+            }
+            .matrix-grid td {
+                background-color: #ffffff;
+                border: none;
+                padding: 7px 4px;
+                text-align: center;
+                font-family: 'Consolas', monospace;
+                font-size: 13px;
+                color: #334155;
+            }
+            .matrix-grid tr:nth-child(even) td {
+                background-color: #f8fafc;
+            }
+            .matrix-grid td.t-col {
+                color: #1d4ed8;
+                font-weight: bold;
+            }
+        </style>
+        <div class="container">
+        """
+        
+        for child_name, data in created_joints.items():
+            joint_id = data.get('joint_id', child_name)
+            is_slave = False
+            for master, slaves in robot.joint_relations.items():
+                if any(s_id == joint_id for s_id, r in slaves):
+                    is_slave = True
+                    break
+            
+            if is_slave:
+                continue
+
+            custom_name = data.get('custom_name', joint_id)
+            
+            if joint_id in robot.joints:
+                joint = robot.joints[joint_id]
+                rot = joint.get_matrix()
+                if joint.child_link:
+                    offset = joint.child_link.t_offset
+                    t_rel = offset @ rot
+                    
+                    ratio = self.mw.canvas.grid_units_per_cm
+                    tx, ty, tz = t_rel[:3, 3] / ratio
+                    
+                    html += f'<div class="matrix-box">'
+                    html += f'  <div class="box-header">{custom_name}</div>'
+                    html += f'  <div class="pos-bar">X: {tx:.3f} &nbsp;&nbsp; Y: {ty:.3f} &nbsp;&nbsp; Z: {tz:.3f}</div>'
+                    html += self.format_matrix_html(t_rel)
+                    html += '</div>'
+        
+        html += "</div>"
+        self.text_area.setHtml(html)
+
+    def format_matrix_html(self, mat):
+        ratio = self.mw.canvas.grid_units_per_cm
+        mat_display = np.copy(mat)
+        mat_display[:3, 3] /= ratio
+        
+        col_labels = ['X', 'Y', 'Z', 'T']
+        
+        table = '<table class="matrix-grid">'
+        table += '<tr>'
+        for lbl in col_labels:
+            table += f'<th>{lbl}</th>'
+        table += '</tr>'
+        for row in mat_display:
+            table += '<tr>'
+            for c_idx, val in enumerate(row):
+                cls = ' class="t-col"' if c_idx == 3 else ''
+                table += f'<td{cls}>{val:8.3f}</td>'
+            table += '</tr>'
+        table += '</table>'
+        return table
