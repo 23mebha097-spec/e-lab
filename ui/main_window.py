@@ -4,6 +4,7 @@ from core.robot import Robot
 from ui.panels.align_panel import AlignPanel
 from ui.panels.joint_panel import JointPanel
 from ui.panels.matrices_panel import MatricesPanel
+from ui.panels.experiment_panel import ExperimentPanel
 from ui.panels.program_panel import ProgramPanel
 from ui.panels.gripper_panel import GripperPanel
 import os
@@ -191,9 +192,9 @@ class MainWindow(QtWidgets.QMainWindow, LinksMixin, NavigationMixin, ProjectMixi
         left_layout.setSpacing(0)
 
         # Experiment Panel
-        self.experiment_tab = MatricesPanel(self)
+        self.experiment_tab = ExperimentPanel(self)
         self.experiment_container = QtWidgets.QWidget()
-        self.experiment_container.setMinimumWidth(350)
+        self.experiment_container.setMinimumWidth(430)
         self.experiment_container.setStyleSheet("background-color: #f0f4f7; border-right: 1px solid #cfd8dc;")
         exp_layout = QtWidgets.QVBoxLayout(self.experiment_container)
         exp_layout.setContentsMargins(0,0,0,0)
@@ -215,7 +216,6 @@ class MainWindow(QtWidgets.QMainWindow, LinksMixin, NavigationMixin, ProjectMixi
             ("Links", "Manage robot links and components"),
             ("Align", "Align components together"),
             ("Joint", "Create and control joints"),
-            ("Matrices", "View transformation matrices"),
             ("Code", "Program robot movements"),
             ("Gripper", "Control and calibrate robotic grippers")
         ]
@@ -237,7 +237,6 @@ class MainWindow(QtWidgets.QMainWindow, LinksMixin, NavigationMixin, ProjectMixi
         self.panel_stack.addWidget(self.links_tab)
         self.panel_stack.addWidget(self.align_tab)
         self.panel_stack.addWidget(self.joint_tab)
-        self.panel_stack.addWidget(self.matrices_tab)
         self.panel_stack.addWidget(self.program_tab)
         self.panel_stack.addWidget(self.gripper_tab)
         
@@ -562,10 +561,10 @@ class MainWindow(QtWidgets.QMainWindow, LinksMixin, NavigationMixin, ProjectMixi
         self.main_splitter.setSizes(sizes)
         
         if show:
-            # Refresh sliders if switching to assembly matrices tab
-            idx = self.panel_stack.currentIndex()
-            if self.panel_stack.widget(idx) == self.matrices_tab:
-                self.matrices_tab.refresh_sliders()
+            # Identifies if we need to refresh the current visible tab
+            widget = self.panel_stack.currentWidget()
+            if hasattr(widget, 'refresh_sliders'):
+                widget.refresh_sliders()
 
     def toggle_experiment_panel(self):
         """Toggles the visibility of the experiment panel."""
@@ -583,7 +582,7 @@ class MainWindow(QtWidgets.QMainWindow, LinksMixin, NavigationMixin, ProjectMixi
         
         # Adjust splitter sizes
         sizes = self.main_splitter.sizes()
-        sizes[1] = 350 if show else 0
+        sizes[1] = 430 if show else 0
         sizes[0] = 0 # Ensure assembly is 0 if experiment is changing
         self.main_splitter.setSizes(sizes)
 

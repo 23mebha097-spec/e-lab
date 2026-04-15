@@ -197,61 +197,55 @@ class MatricesPanel(QtWidgets.QWidget):
 
         html = """
         <style>
-            .container { padding: 8px; background-color: #ffffff; }
+            .container { padding: 15px; background-color: #ffffff; }
             .matrix-box { 
-                border: 2px solid #3b82f6; 
-                border-radius: 8px; 
-                margin-bottom: 20px; 
+                border: 1px solid #e2e8f0; 
+                border-radius: 12px; 
+                margin-bottom: 28px; 
                 overflow: hidden;
+                box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
             }
             .box-header {
-                background-color: #3b82f6;
+                background-color: #2563eb;
                 color: #ffffff;
                 font-family: 'Segoe UI', sans-serif;
-                font-size: 13px;
+                font-size: 18px;
                 font-weight: 700;
-                padding: 8px 14px;
-                letter-spacing: 0.5px;
-            }
-            .pos-bar {
-                background-color: #eff6ff;
-                color: #1e40af;
-                font-family: 'Consolas', monospace;
-                font-size: 12px;
-                font-weight: 600;
-                padding: 5px 14px;
-                border-bottom: 1px solid #dbeafe;
+                padding: 12px 18px;
+                letter-spacing: 1px;
             }
             .matrix-grid {
                 border-collapse: collapse;
                 width: 100%;
             }
             .matrix-grid th {
-                background-color: #eff6ff;
-                color: #3b82f6;
+                background-color: #f1f5f9;
+                color: #475569;
                 font-family: 'Segoe UI', sans-serif;
-                font-size: 11px;
-                font-weight: 700;
+                font-size: 15px;
+                font-weight: 800;
                 text-transform: uppercase;
-                padding: 5px 4px;
+                padding: 10px 8px;
                 text-align: center;
-                border-bottom: 1px solid #dbeafe;
+                border-bottom: 2px solid #e2e8f0;
+                letter-spacing: 1.2px;
             }
             .matrix-grid td {
                 background-color: #ffffff;
                 border: none;
-                padding: 7px 4px;
+                padding: 12px 8px;
                 text-align: center;
                 font-family: 'Consolas', monospace;
-                font-size: 13px;
-                color: #334155;
+                font-size: 17px;
+                color: #0f172a;
+                font-weight: 600;
             }
             .matrix-grid tr:nth-child(even) td {
                 background-color: #f8fafc;
             }
             .matrix-grid td.t-col {
-                color: #1d4ed8;
-                font-weight: bold;
+                color: #2563eb;
+                font-weight: 800;
             }
         </style>
         <div class="container">
@@ -277,12 +271,8 @@ class MatricesPanel(QtWidgets.QWidget):
                     offset = joint.child_link.t_offset
                     t_rel = offset @ rot
                     
-                    ratio = self.mw.canvas.grid_units_per_cm
-                    tx, ty, tz = t_rel[:3, 3] / ratio
-                    
                     html += f'<div class="matrix-box">'
                     html += f'  <div class="box-header">{custom_name}</div>'
-                    html += f'  <div class="pos-bar">X: {tx:.3f} &nbsp;&nbsp; Y: {ty:.3f} &nbsp;&nbsp; Z: {tz:.3f}</div>'
                     html += self.format_matrix_html(t_rel)
                     html += '</div>'
         
